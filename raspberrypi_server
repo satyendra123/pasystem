@@ -1,3 +1,7 @@
+#NOTE- now lets suppose my client is sending the message to http://192.168.1.51:5000/send_message in this url but my server is running on 0.0.0.0:5000 port so all my PI will receive the client
+data then extract the id and message and match with its id if the id is matched then it will convert the text message to audio and play with the speaker. and this is also a good approach
+otherwise i need to run each server with its specific ip and port
+
 from flask import Flask, request, jsonify
 from gtts import gTTS
 import pygame
@@ -5,10 +9,10 @@ import os
 
 app = Flask(__name__)
 
-# Define your speaker ID here
-EXPECTED_ID = 'speaker1'
+# Define the unique ID for this Raspberry Pi
+RASPBERRY_PI_ID = 'speaker1'  # Change this ID for each Raspberry Pi
 
-# Initialize Pygame mixer
+# Initialize Pygame mixer for audio playback
 pygame.mixer.init()
 
 @app.route('/send-message', methods=['POST'])
@@ -21,21 +25,21 @@ def receive_message():
         return jsonify({'status': 'error', 'message': 'ID and message are required'}), 400
 
     # Check if the received speaker ID matches the expected ID
-    if speaker_id != EXPECTED_ID:
+    if speaker_id != RASPBERRY_PI_ID:
         return jsonify({'status': 'error', 'message': 'Invalid speaker ID'}), 400
 
-    # Convert text to speech
+    # Convert the text message to speech
     tts = gTTS(text=message, lang='en')
     audio_file = 'message.mp3'
     tts.save(audio_file)
 
-    # Play the audio file
+    # Play the audio file through the speaker
     try:
         pygame.mixer.music.load(audio_file)
         pygame.mixer.music.play()
-        while pygame.mixer.music.get_busy():  # Wait for the music to finish playing
+        while pygame.mixer.music.get_busy():  # Wait for the audio to finish playing
             pygame.time.Clock().tick(10)
-        os.remove(audio_file)  # Clean up by removing the file
+        os.remove(audio_file)  # Clean up by removing the file after playback
     except Exception as e:
         print(f'Error playing audio: {e}')
         return jsonify({'status': 'error', 'message': 'Error playing audio'}), 500
@@ -43,4 +47,5 @@ def receive_message():
     return jsonify({'status': 'success', 'message': 'Message received and played'})
 
 if __name__ == '__main__':
+    # Run the Flask server on the Raspberry Pi's IP and port 5000
     app.run(host='0.0.0.0', port=5000)
