@@ -1,3 +1,4 @@
+#this code works fine. when i record the audio and the same is sending to the flask backened
 import React, { useState } from 'react';
 import MicRecorder from 'mic-recorder-to-mp3';
 
