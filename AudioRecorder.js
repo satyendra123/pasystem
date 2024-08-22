@@ -1,13 +1,16 @@
-#this code works fine. when i record the audio and the same is sending to the flask backened
+# AudioRecorder.jsx file this code works fine. when i record the audio and the same is sending to the flask backened
+
 import React, { useState } from 'react';
 import MicRecorder from 'mic-recorder-to-mp3';
+import { MdMic, MdMicOff } from 'react-icons/md';
 
-const AudioRecorder = () => {
+const AudioStreaming = () => {
   const [recorder] = useState(new MicRecorder({ bitRate: 128 }));
   const [isRecording, setIsRecording] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
 
-  const startRecording = () => {
+  const startRecording = (e) => {
+    e.stopPropagation();
     if (isBlocked) {
       alert('Microphone access is blocked.');
     } else {
@@ -22,40 +25,34 @@ const AudioRecorder = () => {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (e) => {
+    e.stopPropagation();
     recorder
       .stop()
       .getMp3()
       .then(([buffer, blob]) => {
-        const file = new File(buffer, 'recording.mp3', {
-          type: blob.type,
-          lastModified: Date.now(),
-        });
+        // Convert the blob to base64
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1];
 
-        // Automatically save the file locally
-        const url = URL.createObjectURL(file);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', file.name);
-        document.body.appendChild(link);
-        link.click();
-        link.parentNode.removeChild(link);
-
-        // Send the audio file to the Flask backend
-        const formData = new FormData();
-        formData.append('file', file);
-
-        fetch('http://localhost:5000/upload', {
-          method: 'POST',
-          body: formData,
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            console.log('Success:', data);
+          // Send the base64 audio data to the Flask backend
+          fetch('http://192.168.1.37:5000/upload', {  // Replace with your Flask server's IP
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ audio: base64data }),
           })
-          .catch((error) => {
-            console.error('Error:', error);
-          });
+            .then((response) => response.json())
+            .then((data) => {
+              console.log('Success:', data);
+            })
+            .catch((error) => {
+              console.error('Error:', error);
+            });
+        };
 
         setIsRecording(false);
       })
@@ -78,19 +75,236 @@ const AudioRecorder = () => {
   }, []);
 
   return (
-    <div>
-      <h1>Record Your Voice</h1>
+    <div style={{ display: 'flex', gap: '10px' }}>
       <button onClick={startRecording} disabled={isRecording}>
-        Start Recording
+        <MdMic style={{ height: '24px', width: '24px', marginRight: '8px' }} />
       </button>
       <button onClick={stopRecording} disabled={!isRecording}>
-        Stop Recording
+        <MdMicOff style={{ height: '24px', width: '24px', marginRight: '8px' }} />
       </button>
     </div>
   );
 };
 
-export default AudioRecorder;
+export default AudioStreaming;
+
+#step-2 TextMessage.jsx
+import React, { useState } from 'react';
+import axios from 'axios';
+import { FaRegCommentDots } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import './TextMessage.css'; // Import the CSS file for styling
+
+const TextMessage = () => {
+    const [message, setMessage] = useState('');
+    const [showPopup, setShowPopup] = useState(false);
+    const navigate = useNavigate();
+
+    const handleIconClick = (e) => {
+        e.stopPropagation();
+        setShowPopup(true); // Show the popup
+    };
+
+    const handleCloseClick = (e) => {
+        e.stopPropagation(); // Prevents triggering parent onClick events
+        setShowPopup(false); // Hide the popup
+        navigate('/'); // Navigate back to the homepage
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.post('http://192.168.1.37:5000/text-to-speech', { message });
+            alert('Message sent successfully!');
+            setMessage('');
+            setShowPopup(false); // Hide the popup after sending
+            navigate('/'); // Navigate back to the homepage
+        } catch (error) {
+            console.error('Error sending message:', error);
+        }
+    };
+
+    return (
+        <div className="text-message-container">
+            <FaRegCommentDots onClick={handleIconClick} style={{ cursor: 'pointer', fontSize: '24px' }} />
+            {showPopup && (
+                <div className="popup-container" onClick={(e) => e.stopPropagation()}>
+                    <div className="popup-content">
+                        <form onSubmit={handleSubmit}>
+                            <input
+                                type="text"
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                placeholder="Type your message..."
+                                required
+                                className="message-input"
+                            />
+                            <div className="button-group">
+                                <button type="button" onClick={handleCloseClick} className="close-button">
+                                    Close
+                                </button>
+                                <button type="submit" className="submit-button">
+                                    Send
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default TextMessage;
+
+#step-3 VideoStream.jsx
+import React, { useState, useRef, useCallback } from 'react';
+
+const VideoStream = () => {
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const containerRef = useRef(null);
+
+  const handleFullScreenToggle = useCallback(() => {
+    if (!isFullScreen) {
+      setIsFullScreen(true);
+    }
+  }, [isFullScreen]);
+
+  const handleClick = (e) => {
+    // Only toggle full-screen if clicking on the container but not the speaker button
+    if (containerRef.current && !containerRef.current.contains(e.target)) {
+      handleFullScreenToggle();
+    }
+  };
+
+
+  return (
+    <div  ref={containerRef}  style={{ 
+        position: 'relative', 
+        width: isFullScreen ? '100vw' : '100%', 
+        height: isFullScreen ? '100vh' : '50vh',
+        cursor: isFullScreen ? 'default' : 'pointer' 
+      }} 
+      onClick={handleClick} >
+      <img src="http://127.0.0.1:5000/video_feed" alt="Video Stream" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+
+    </div>
+  );
+};
+
+export default VideoStream;
+
+#step-4 Home.jsx file
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import Navbar from "./Navbar";
+import VideoStream from "./VideoStream";
+import AudioRecorder from "./AudioRecorder";
+import TextMessage from "./TextMessage";
+
+const Home = ({ Toggle }) => {
+  const navigate = useNavigate();
+
+  const handleCameraClick = (e) => {
+    if (e.target.id !== "speaker-button") {
+      Toggle();
+      navigate("/fullscreen");
+    }
+  };
+
+  return (
+    <div className="px-3 bg-secondary">
+      <Navbar Toggle={Toggle} />
+      <div className="container-fluid">
+        <div className="row g-3 my-2">
+          <div className="col-md-6 p-1" onClick={handleCameraClick}>
+            <div
+              className="p-3 bg-white shadow-sm d-flex justify-content-around align-items-center"
+              style={{ height: "50vh", cursor: "pointer", overflow: "hidden" }}
+            >
+              <VideoStream /> {/* VideoStream with audio toggle */}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <AudioRecorder />
+                <TextMessage />
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 p-1" onClick={handleCameraClick}>
+            <div
+              className="p-3 bg-white shadow-sm d-flex justify-content-around align-items-center"
+              style={{ height: "50vh", cursor: "pointer", overflow: "hidden" }}
+            >
+              <VideoStream /> {/* Another VideoStream with audio toggle */}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <AudioRecorder />
+                <TextMessage />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="row g-3">
+          <div className="col-md-6 p-1" onClick={handleCameraClick}>
+            <div
+              className="p-3 bg-white shadow-sm d-flex justify-content-around align-items-center"
+              style={{ height: "50vh", cursor: "pointer", overflow: "hidden" }}
+            >
+              <VideoStream /> {/* VideoStream with audio toggle */}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <AudioRecorder />
+                <TextMessage />
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 p-1" onClick={handleCameraClick}>
+            <div
+              className="p-3 bg-white shadow-sm d-flex justify-content-around align-items-center"
+              style={{ height: "50vh", cursor: "pointer", overflow: "hidden" }}
+            >
+              <VideoStream /> {/* Another VideoStream with audio toggle */}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <AudioRecorder />
+                <TextMessage />
+              </div>
+            </div>
+          </div>
+        </div>
+        <table className="table caption-top bg-white rounded mt-2">
+          <caption className="text-white fs-4">Recent Orders</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">First</th>
+              <th scope="col">Last</th>
+              <th scope="col">Handle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">1</th>
+              <td>Mark</td>
+              <td>Otto</td>
+              <td>@mdo</td>
+            </tr>
+            <tr>
+              <th scope="row">2</th>
+              <td>Jacob</td>
+              <td>Thornton</td>
+              <td>@fat</td>
+            </tr>
+            <tr>
+              <th scope="row">3</th>
+              <td colSpan="2">Larry the Bird</td>
+              <td>@twitter</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+
 
 #step-2 audio.py
 from flask import Flask, request, jsonify
