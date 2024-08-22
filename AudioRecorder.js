@@ -94,30 +94,92 @@ export default AudioRecorder;
 
 #step-2 audio.py
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+from gtts import gTTS
+import base64
 import os
+from playsound import playsound
 
 app = Flask(__name__)
+CORS(app)
 
-# Ensure the uploads folder exists
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+AUDIO_FILE_PATH = "received_audio.mp3"
+TEXT_TO_SPEECH_FILE_PATH = "spoken_message.mp3"
 
 @app.route('/upload', methods=['POST'])
 def upload_audio():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    # Save the file to the uploads directory
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(file_path)
+    data = request.json
+    audio_base64 = data.get('audio')
 
-    return jsonify({'message': 'File uploaded successfully', 'file_path': file_path}), 200
+    if not audio_base64:
+        return jsonify({"error": "No audio data provided"}), 400
+
+    try:
+        with open(AUDIO_FILE_PATH, "wb") as audio_file:
+            audio_file.write(base64.b64decode(audio_base64))
+
+        print(f"File saved to {AUDIO_FILE_PATH}")
+
+        try:
+            playsound(AUDIO_FILE_PATH)
+        except Exception as e:
+            print(f"Error playing the audio file: {str(e)}")
+            return jsonify({"error": f"Error playing the audio file: {str(e)}"}), 500
+
+        try:
+            os.remove(AUDIO_FILE_PATH)
+            print(f"File {AUDIO_FILE_PATH} deleted")
+        except Exception as e:
+            print(f"Error deleting the file: {str(e)}")
+
+        return jsonify({"message": "Audio received, saved, played, and deleted successfully"}), 200
+
+    except Exception as e:
+        print(f"Error processing the audio file: {str(e)}")
+        return jsonify({"error": f"Error processing the audio file: {str(e)}"}), 500
+
+@app.route('/text-to-speech', methods=['POST'])
+def text_to_speech():
+    data = request.json
+    message = data.get('message')
+
+    if not message:
+        return jsonify({"error": "No text message provided"}), 400
+
+    try:
+        # Convert the text message to speech and save it as an MP3 file
+        tts = gTTS(message)
+        tts.save(TEXT_TO_SPEECH_FILE_PATH)
+
+        # Log file saved
+        print(f"File saved to {TEXT_TO_SPEECH_FILE_PATH}")
+
+        try:
+            # Play the audio file
+            playsound(TEXT_TO_SPEECH_FILE_PATH)
+        except Exception as e:
+            # Log the error and send response
+            print(f"Error playing the audio file: {str(e)}")
+            return jsonify({"error": f"Error playing the audio file: {str(e)}"}), 500
+
+        # Delete the file after playing
+        try:
+            os.remove(TEXT_TO_SPEECH_FILE_PATH)
+            print(f"File {TEXT_TO_SPEECH_FILE_PATH} deleted")
+        except Exception as e:
+            # Log the error but continue to respond
+            print(f"Error deleting the file: {str(e)}")
+
+        return jsonify({"message": "Text-to-speech conversion, playback, and deletion successful"}), 200
+
+    except Exception as e:
+        # Log the error and send response
+        print(f"Error processing the text message: {str(e)}")
+        return jsonify({"error": f"Error processing the text message: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='192.168.1.37', port=5000, debug=True)  # Listen on all network interfaces
+
 
 #step-3 in this code what we can do is we simply connects a microphone which records the audio and send this streaming audio through the html same as we have done for the webcam. there is a website running on the webpage and there is start and stop button when the user click on the start then audio can be listen through the webpage send by the raspberry pi
 from flask import Flask,Response,render_template
